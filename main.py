@@ -3,32 +3,39 @@ import os
 
 def get_weather():
     key = os.environ.get("WEATHER_KEY")
-    lat = 33.59   # 福冈
-    lon = 130.40
+    city = "Fukuoka"
 
-    url = f"https://api.openweathermap.org/data/2.5/onecall?lat={lat}&lon={lon}&appid={key}&units=metric&lang=zh_cn"
-    data = requests.get(url).json()
+    url = f"https://api.openweathermap.org/data/2.5/forecast?q={city}&appid={key}&units=metric&lang=zh_cn"
+    res = requests.get(url)
 
-    current = data["current"]
-    today = data["daily"][0]
+    try:
+        data = res.json()
 
-    temp_now = current["temp"]
-    temp_max = today["temp"]["max"]
-    temp_min = today["temp"]["min"]
-    weather_desc = today["weather"][0]["description"]
+        if "list" not in data:
+            return f"API返回异常：{data}"
 
-    rain = today.get("rain", 0)
+        # 当前（取第一个）
+        current = data["list"][0]
+        temp_now = current["main"]["temp"]
+        desc = current["weather"][0]["description"]
 
-    # 简单判断建议
-    if rain > 0:
-        advice = "记得带伞 ☔"
-    elif temp_max > 30:
-        advice = "天气较热，注意防晒 🧴"
-    else:
-        advice = "适合外出 🌿"
+        # 计算当天最高/最低
+        temps = [item["main"]["temp"] for item in data["list"][:8]]  # 未来24小时
+        temp_max = max(temps)
+        temp_min = min(temps)
 
-    return f"""【福冈天气】
-{weather_desc}
+        # 判断是否有雨
+        rain = any("rain" in item for item in data["list"][:8])
+
+        if rain:
+            advice = "记得带伞 ☔"
+        elif temp_max > 30:
+            advice = "天气较热，注意防晒 🧴"
+        else:
+            advice = "适合外出 🌿"
+
+        return f"""【福冈天气】
+{desc}
 🌡 当前：{temp_now}℃
 ⬆️ 最高：{temp_max}℃
 ⬇️ 最低：{temp_min}℃
@@ -37,13 +44,16 @@ def get_weather():
 建议：{advice}
 """
 
+    except Exception as e:
+        return f"天气获取失败：{e}"
+
 def send_wechat(msg):
     key = os.environ.get("SCKEY")
     url = f"https://sctapi.ftqq.com/{key}.send"
 
     requests.post(url, data={
-        "title": "🌤 每日天气",
-        "desp": msg
+        "title": msg,
+        "desp": ""
     })
 
 if __name__ == "__main__":
